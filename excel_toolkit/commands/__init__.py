@@ -22,6 +22,9 @@ from excel_toolkit.commands.rename import rename, app as rename_app
 from excel_toolkit.commands.search import search, app as search_app
 from excel_toolkit.commands.convert import convert, app as convert_app
 from excel_toolkit.commands.merge import merge, app as merge_app
+from excel_toolkit.commands.join import join, app as join_app
+from excel_toolkit.commands.tail import tail, app as tail_app
+from excel_toolkit.commands.count import count, app as count_app
 
 __all__ = [
     "info",
@@ -58,4 +61,10 @@ __all__ = [
     "convert_app",
     "merge",
     "merge_app",
+    "join",
+    "join_app",
+    "tail",
+    "tail_app",
+    "count",
+    "count_app",
 ]

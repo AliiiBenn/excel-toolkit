@@ -21,6 +21,9 @@ from excel_toolkit.commands.rename import rename as rename_command
 from excel_toolkit.commands.search import search as search_command
 from excel_toolkit.commands.convert import convert as convert_command
 from excel_toolkit.commands.merge import merge as merge_command
+from excel_toolkit.commands.join import join as join_command
+from excel_toolkit.commands.tail import tail as tail_command
+from excel_toolkit.commands.count import count as count_command
 
 try:
     __version__ = version("excel-toolkit")
@@ -65,6 +68,9 @@ app.command()(rename_command)
 app.command()(search_command)
 app.command()(convert_command)
 app.command()(merge_command)
+app.command()(join_command)
+app.command()(tail_command)
+app.command()(count_command)
 
 
 if __name__ == "__main__":
