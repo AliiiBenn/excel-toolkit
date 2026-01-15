@@ -10,6 +10,7 @@ from excel_toolkit.commands.head import head, app as head_app
 from excel_toolkit.commands.filter import filter, app as filter_app
 from excel_toolkit.commands.sort import sort, app as sort_app
 from excel_toolkit.commands.stats import stats, app as stats_app
+from excel_toolkit.commands.validate import validate, app as validate_app
 
 __all__ = [
     "info",
@@ -22,4 +23,6 @@ __all__ = [
     "sort_app",
     "stats",
     "stats_app",
+    "validate",
+    "validate_app",
 ]
