@@ -15,6 +15,9 @@ from excel_toolkit.commands.select import select as select_command
 from excel_toolkit.commands.dedupe import dedupe as dedupe_command
 from excel_toolkit.commands.fill import fill as fill_command
 from excel_toolkit.commands.group import group as group_command
+from excel_toolkit.commands.unique import unique as unique_command
+from excel_toolkit.commands.transform import transform as transform_command
+from excel_toolkit.commands.rename import rename as rename_command
 
 try:
     __version__ = version("excel-toolkit")
@@ -53,6 +56,9 @@ app.command()(select_command)
 app.command()(dedupe_command)
 app.command()(fill_command)
 app.command()(group_command)
+app.command()(unique_command)
+app.command()(transform_command)
+app.command()(rename_command)
 
 
 if __name__ == "__main__":

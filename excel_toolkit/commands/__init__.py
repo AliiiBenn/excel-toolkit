@@ -16,6 +16,9 @@ from excel_toolkit.commands.select import select, app as select_app
 from excel_toolkit.commands.dedupe import dedupe, app as dedupe_app
 from excel_toolkit.commands.fill import fill, app as fill_app
 from excel_toolkit.commands.group import group, app as group_app
+from excel_toolkit.commands.unique import unique, app as unique_app
+from excel_toolkit.commands.transform import transform, app as transform_app
+from excel_toolkit.commands.rename import rename, app as rename_app
 
 __all__ = [
     "info",
@@ -40,4 +43,10 @@ __all__ = [
     "fill_app",
     "group",
     "group_app",
+    "unique",
+    "unique_app",
+    "transform",
+    "transform_app",
+    "rename",
+    "rename_app",
 ]
