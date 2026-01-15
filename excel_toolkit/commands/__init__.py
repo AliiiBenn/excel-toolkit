@@ -25,6 +25,9 @@ from excel_toolkit.commands.merge import merge, app as merge_app
 from excel_toolkit.commands.join import join, app as join_app
 from excel_toolkit.commands.tail import tail, app as tail_app
 from excel_toolkit.commands.count import count, app as count_app
+from excel_toolkit.commands.append import append, app as append_app
+from excel_toolkit.commands.strip import strip, app as strip_app
+from excel_toolkit.commands.export import export, app as export_app
 
 __all__ = [
     "info",
@@ -67,4 +70,10 @@ __all__ = [
     "tail_app",
     "count",
     "count_app",
+    "append",
+    "append_app",
+    "strip",
+    "strip_app",
+    "export",
+    "export_app",
 ]

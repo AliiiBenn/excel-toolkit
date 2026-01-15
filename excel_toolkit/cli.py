@@ -24,6 +24,9 @@ from excel_toolkit.commands.merge import merge as merge_command
 from excel_toolkit.commands.join import join as join_command
 from excel_toolkit.commands.tail import tail as tail_command
 from excel_toolkit.commands.count import count as count_command
+from excel_toolkit.commands.append import append as append_command
+from excel_toolkit.commands.strip import strip as strip_command
+from excel_toolkit.commands.export import export as export_command
 
 try:
     __version__ = version("excel-toolkit")
@@ -71,6 +74,9 @@ app.command()(merge_command)
 app.command()(join_command)
 app.command()(tail_command)
 app.command()(count_command)
+app.command()(append_command)
+app.command()(strip_command)
+app.command()(export_command)
 
 
 if __name__ == "__main__":
