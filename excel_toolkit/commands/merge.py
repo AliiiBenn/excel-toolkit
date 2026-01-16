@@ -10,9 +10,12 @@ import glob
 import typer
 import pandas as pd
 
-from excel_toolkit.core import HandlerFactory, ExcelHandler, CSVHandler
+from excel_toolkit.core import HandlerFactory
 from excel_toolkit.fp import is_ok, is_err, unwrap, unwrap_err
-from excel_toolkit.commands.common import display_table
+from excel_toolkit.commands.common import (
+    read_data_file,
+    write_or_display,
+)
 
 
 def merge(
@@ -34,7 +37,7 @@ def merge(
     output_path = Path(output)
     factory = HandlerFactory()
 
-    # Step 1: Expand file paths (handle wildcards)
+    # 1. Expand file paths (handle wildcards)
     expanded_paths = []
     for file_pattern in files.split(","):
         file_pattern = file_pattern.strip()
@@ -56,50 +59,19 @@ def merge(
         typer.echo("Error: No files to merge", err=True)
         raise typer.Exit(1)
 
-    # Step 2: Read all files
+    # 2. Read all files
     dfs = []
     columns_per_file = []
     rows_per_file = []
 
     for file_path in expanded_paths:
-        # Get handler
-        handler_result = factory.get_handler(file_path)
-        if is_err(handler_result):
-            error = unwrap_err(handler_result)
-            typer.echo(f"Error with {file_path}: {error}", err=True)
-            raise typer.Exit(1)
-
-        handler = unwrap(handler_result)
-
-        # Read file
-        if isinstance(handler, ExcelHandler):
-            sheet_name = sheet
-            kwargs = {"sheet_name": sheet_name} if sheet_name else {}
-            read_result = handler.read(file_path, **kwargs)
-        elif isinstance(handler, CSVHandler):
-            # Auto-detect encoding and delimiter
-            encoding_result = handler.detect_encoding(file_path)
-            encoding = unwrap(encoding_result) if is_ok(encoding_result) else "utf-8"
-
-            delimiter_result = handler.detect_delimiter(file_path, encoding)
-            delimiter = unwrap(delimiter_result) if is_ok(delimiter_result) else ","
-
-            read_result = handler.read(file_path, encoding=encoding, delimiter=delimiter)
-        else:
-            typer.echo(f"Unsupported file type: {file_path}", err=True)
-            raise typer.Exit(1)
-
-        if is_err(read_result):
-            error = unwrap_err(read_result)
-            typer.echo(f"Error reading {file_path}: {error}", err=True)
-            raise typer.Exit(1)
-
-        df = unwrap(read_result)
+        # Read file using helper
+        df = read_data_file(str(file_path), sheet)
         dfs.append(df)
         columns_per_file.append(set(df.columns))
         rows_per_file.append(len(df))
 
-    # Step 3: Check if all files have the same columns
+    # 3. Check if all files have the same columns
     if len(columns_per_file) > 1:
         first_columns = columns_per_file[0]
         for i, cols in enumerate(columns_per_file[1:], 1):
@@ -109,14 +81,14 @@ def merge(
                 typer.echo(f"Found columns: {sorted(cols)}")
                 raise typer.Exit(1)
 
-    # Step 4: Merge DataFrames
+    # 4. Merge DataFrames
     try:
         df_merged = pd.concat(dfs, ignore_index=ignore_index)
     except Exception as e:
         typer.echo(f"Error merging files: {e}", err=True)
         raise typer.Exit(1)
 
-    # Step 5: Display summary
+    # 5. Display summary
     typer.echo(f"Files merged: {len(expanded_paths)}")
     for i, (file_path, rows) in enumerate(zip(expanded_paths, rows_per_file), 1):
         typer.echo(f"  {i}. {file_path.name}: {rows} rows")
@@ -124,7 +96,7 @@ def merge(
     typer.echo(f"Total columns: {len(df_merged.columns)}")
     typer.echo("")
 
-    # Step 6: Write output
+    # 6. Write output
     write_result = factory.write_file(df_merged, output_path)
     if is_err(write_result):
         error = unwrap_err(write_result)

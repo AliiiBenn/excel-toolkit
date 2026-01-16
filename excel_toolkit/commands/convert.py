@@ -4,13 +4,13 @@ Convert between different file formats.
 """
 
 from pathlib import Path
-from typing import Any
 
 import typer
 import pandas as pd
 
-from excel_toolkit.core import HandlerFactory, ExcelHandler, CSVHandler
+from excel_toolkit.core import HandlerFactory
 from excel_toolkit.fp import is_ok, is_err, unwrap, unwrap_err
+from excel_toolkit.commands.common import read_data_file
 
 
 def convert(
@@ -32,12 +32,7 @@ def convert(
     output_path = Path(output)
     factory = HandlerFactory()
 
-    # Step 1: Validate input file exists
-    if not input_path.exists():
-        typer.echo(f"File not found: {file_path}", err=True)
-        raise typer.Exit(1)
-
-    # Step 2: Validate output format
+    # 1. Validate output format
     output_ext = output_path.suffix.lower()
     supported_formats = {'.xlsx', '.xlsm', '.csv', '.json'}
 
@@ -46,52 +41,21 @@ def convert(
         typer.echo(f"Supported formats: {', '.join(sorted(supported_formats))}")
         raise typer.Exit(1)
 
-    # Step 3: Get handler for input file
-    handler_result = factory.get_handler(input_path)
-    if is_err(handler_result):
-        error = unwrap_err(handler_result)
-        typer.echo(f"{error}", err=True)
-        raise typer.Exit(1)
+    # 2. Read input file
+    df = read_data_file(file_path, sheet)
 
-    handler = unwrap(handler_result)
-
-    # Step 4: Read input file
-    if isinstance(handler, ExcelHandler):
-        sheet_name = sheet
-        kwargs = {"sheet_name": sheet_name} if sheet_name else {}
-        read_result = handler.read(input_path, **kwargs)
-    elif isinstance(handler, CSVHandler):
-        # Auto-detect encoding and delimiter
-        encoding_result = handler.detect_encoding(input_path)
-        encoding = unwrap(encoding_result) if is_ok(encoding_result) else "utf-8"
-
-        delimiter_result = handler.detect_delimiter(input_path, encoding)
-        delimiter = unwrap(delimiter_result) if is_ok(delimiter_result) else ","
-
-        read_result = handler.read(input_path, encoding=encoding, delimiter=delimiter)
-    else:
-        typer.echo("Unsupported handler type", err=True)
-        raise typer.Exit(1)
-
-    if is_err(read_result):
-        error = unwrap_err(read_result)
-        typer.echo(f"Error reading file: {error}", err=True)
-        raise typer.Exit(1)
-
-    df = unwrap(read_result)
-
-    # Step 5: Handle empty file
+    # 3. Handle empty file
     if df.empty:
         typer.echo("Warning: Input file is empty (no data rows)", err=True)
 
-    # Step 6: Write to output format
+    # 4. Write to output format
     write_result = factory.write_file(df, output_path)
     if is_err(write_result):
         error = unwrap_err(write_result)
         typer.echo(f"Error writing file: {error}", err=True)
         raise typer.Exit(1)
 
-    # Step 7: Display summary
+    # 5. Display summary
     input_format = input_path.suffix.lower()
     typer.echo(f"Input format: {input_format}")
     typer.echo(f"Output format: {output_ext}")
