@@ -14,8 +14,9 @@ Error types are organized by category:
 - CompareError: Comparison operation errors
 """
 
+from dataclasses import field
 from excel_toolkit.fp.immutable import immutable, dataclass
-from typing import Any
+from typing import Any, Callable
 
 
 # =============================================================================
@@ -439,3 +440,217 @@ ComparisonValidationError = (
     KeyColumnsNotFoundError2
 )
 CompareError = ComparisonFailedError
+
+# =============================================================================
+# Phase 2: Support Operations Error Types
+# =============================================================================
+
+# Cleaning operation errors
+@dataclass
+@immutable
+class CleaningError(Error):
+    """Base error for cleaning operations."""
+    message: str
+
+
+@dataclass
+@immutable
+class InvalidFillStrategyError(CleaningError):
+    """Invalid fill strategy specified."""
+    strategy: str
+    valid_strategies: list[str] = field(default_factory=lambda: [
+        "forward", "backward", "mean", "median", "constant", "drop"
+    ])
+
+
+@dataclass
+@immutable
+class FillFailedError(CleaningError):
+    """Fill operation failed."""
+    column: str
+    reason: str
+
+
+CleaningValidationError = (
+    ColumnNotFoundError |
+    InvalidParameterError
+)
+
+# Transforming operation errors
+@dataclass
+@immutable
+class TransformError(Error):
+    """Base error for transform operations."""
+    message: str
+
+
+@dataclass
+@immutable
+class InvalidExpressionError(TransformError):
+    """Invalid expression provided."""
+    expression: str
+    reason: str
+
+
+@dataclass
+@immutable
+class InvalidTypeError(TransformError):
+    """Invalid type specified for casting."""
+    type_name: str
+    valid_types: list[str] = field(default_factory=lambda: [
+        "int", "float", "str", "bool", "datetime", "category"
+    ])
+
+
+@dataclass
+@immutable
+class CastFailedError(TransformError):
+    """Casting operation failed."""
+    column: str
+    target_type: str
+    reason: str
+
+
+@dataclass
+@immutable
+class InvalidTransformationError(TransformError):
+    """Invalid transformation name."""
+    transformation: str
+    valid_transformations: list[str] = field(default_factory=lambda: [
+        "log", "sqrt", "abs", "exp", "standardize", "normalize"
+    ])
+
+
+TransformValidationError = (
+    ColumnNotFoundError |
+    InvalidTypeError |
+    InvalidTransformationError
+)
+
+# Joining operation errors
+@dataclass
+@immutable
+class JoinError(Error):
+    """Base error for join operations."""
+    message: str
+
+
+@dataclass
+@immutable
+class InvalidJoinTypeError(JoinError):
+    """Invalid join type specified."""
+    join_type: str
+    valid_types: list[str] = field(default_factory=lambda: [
+        "inner", "left", "right", "outer", "cross"
+    ])
+
+
+@dataclass
+@immutable
+class InvalidJoinParametersError(JoinError):
+    """Invalid combination of join parameters."""
+    reason: str
+
+
+@dataclass
+@immutable
+class JoinColumnsNotFoundError(JoinError):
+    """Join columns not found in DataFrames."""
+    missing_in_left: list[str] = field(default_factory=list)
+    missing_in_right: list[str] = field(default_factory=list)
+
+
+@dataclass
+@immutable
+class MergeColumnsNotFoundError(JoinError):
+    """Merge columns not found in all DataFrames."""
+    missing: dict[int, list[str]] = field(default_factory dict)  # DataFrame index -> missing columns
+
+
+@dataclass
+@immutable
+class InsufficientDataFramesError(JoinError):
+    """Less than 2 DataFrames provided for merge."""
+    count: int
+
+
+JoinValidationError = (
+    InvalidJoinParametersError |
+    JoinColumnsNotFoundError
+)
+
+JoinOperationError = (
+    InvalidJoinTypeError |
+    JoinValidationError |
+    JoinColumnsNotFoundError
+)
+
+# Validation operation errors
+@dataclass
+@immutable
+class ValidationError(Error):
+    """Base error for validation operations."""
+    message: str
+
+
+@dataclass
+@immutable
+class ValueOutOfRangeError(ValidationError):
+    """Values outside specified range."""
+    column: str
+    min_value: Any
+    max_value: Any
+    violation_count: int
+
+
+@dataclass
+@immutable
+class NullValueThresholdExceededError(ValidationError):
+    """Null values exceed threshold."""
+    column: str
+    null_count: int
+    null_percent: float
+    threshold: float
+
+
+@dataclass
+@immutable
+class UniquenessViolationError(ValidationError):
+    """Duplicate values found."""
+    columns: list[str]
+    duplicate_count: int
+    sample_duplicates: list = field(default_factory=list)
+
+
+@dataclass
+@immutable
+class InvalidRuleError(ValidationError):
+    """Invalid validation rule."""
+    rule_type: str
+    reason: str
+
+
+@dataclass
+@immutable
+class TypeMismatchError(ValidationError):
+    """Column type doesn't match expected type."""
+    column: str
+    expected_type: str | list[str]
+    actual_type: str
+
+
+# Validation result structure (not an error type, mutable)
+class ValidationReport:
+    """Report from validate_dataframe()."""
+
+    def __init__(
+        self,
+        passed: int,
+        failed: int,
+        errors: list[dict] | None = None,
+        warnings: list[dict] | None = None
+    ):
+        self.passed = passed
+        self.failed = failed
+        self.errors = errors or []
+        self.warnings = warnings or []
