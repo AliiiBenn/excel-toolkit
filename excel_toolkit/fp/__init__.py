@@ -25,6 +25,9 @@ from excel_toolkit.fp.result import (
     UnwrapError,
 )
 
+# Result type for type hints
+from excel_toolkit.fp._result import Result
+
 # Maybe API - functions only
 from excel_toolkit.fp.maybe import (
     some,
@@ -52,6 +55,7 @@ __all__ = [
     "unwrap_err",
     "result_to_result",
     "UnwrapError",
+    "Result",
     # Maybe
     "some",
     "nothing",
