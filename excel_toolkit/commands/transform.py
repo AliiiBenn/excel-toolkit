@@ -4,14 +4,17 @@ Apply transformations to columns.
 """
 
 from pathlib import Path
-from typing import Any
 
 import typer
 import pandas as pd
 
-from excel_toolkit.core import HandlerFactory, ExcelHandler, CSVHandler
+from excel_toolkit.core import HandlerFactory
 from excel_toolkit.fp import is_ok, is_err, unwrap, unwrap_err
-from excel_toolkit.commands.common import display_table
+from excel_toolkit.commands.common import (
+    read_data_file,
+    write_or_display,
+    display_table,
+)
 
 
 def transform(
@@ -39,15 +42,7 @@ def transform(
         xl transform data.xlsx --columns "Description" --operation "strip" --output clean.xlsx
         xl transform sales.xlsx --columns "Amount" --add "100" --output adjusted.xlsx
     """
-    path = Path(file_path)
-    factory = HandlerFactory()
-
-    # Step 1: Validate file exists
-    if not path.exists():
-        typer.echo(f"File not found: {file_path}", err=True)
-        raise typer.Exit(1)
-
-    # Step 2: Validate transformation options
+    # 1. Validate transformation options
     math_operations = {
         'multiply': multiply,
         'add': add,
@@ -71,6 +66,9 @@ def transform(
         raise typer.Exit(1)
 
     # Validate only one math operation
+    math_op = None
+    numeric_value = None
+
     if has_math_op:
         active_math_ops = [k for k, v in math_operations.items() if v is not None]
         if len(active_math_ops) > 1:
@@ -87,7 +85,7 @@ def transform(
             typer.echo(f"Error: Invalid numeric value '{math_value}' for --{math_op}", err=True)
             raise typer.Exit(1)
 
-    # Step 3: Validate string operation
+    # 2. Validate string operation
     valid_string_ops = ["uppercase", "lowercase", "titlecase", "strip", "replace", "length"]
     if operation and operation not in valid_string_ops:
         typer.echo(f"Error: Invalid operation '{operation}'", err=True)
@@ -100,47 +98,16 @@ def transform(
         typer.echo("Format: --replace \"old_pattern,new_pattern\"")
         raise typer.Exit(1)
 
-    # Step 4: Get handler
-    handler_result = factory.get_handler(path)
-    if is_err(handler_result):
-        error = unwrap_err(handler_result)
-        typer.echo(f"{error}", err=True)
-        raise typer.Exit(1)
-
-    handler = unwrap(handler_result)
-
-    # Step 5: Read file
-    if isinstance(handler, ExcelHandler):
-        sheet_name = sheet
-        kwargs = {"sheet_name": sheet_name} if sheet_name else {}
-        read_result = handler.read(path, **kwargs)
-    elif isinstance(handler, CSVHandler):
-        # Auto-detect encoding and delimiter
-        encoding_result = handler.detect_encoding(path)
-        encoding = unwrap(encoding_result) if is_ok(encoding_result) else "utf-8"
-
-        delimiter_result = handler.detect_delimiter(path, encoding)
-        delimiter = unwrap(delimiter_result) if is_ok(delimiter_result) else ","
-
-        read_result = handler.read(path, encoding=encoding, delimiter=delimiter)
-    else:
-        typer.echo("Unsupported handler type", err=True)
-        raise typer.Exit(1)
-
-    if is_err(read_result):
-        error = unwrap_err(read_result)
-        typer.echo(f"Error reading file: {error}", err=True)
-        raise typer.Exit(1)
-
-    df = unwrap(read_result)
+    # 3. Read file
+    df = read_data_file(file_path, sheet)
     original_count = len(df)
 
-    # Step 6: Handle empty file
+    # 4. Handle empty file
     if df.empty:
         typer.echo("File is empty (no data rows)")
         raise typer.Exit(0)
 
-    # Step 7: Parse columns
+    # 5. Parse columns
     column_list = [c.strip() for c in columns.split(",")]
     # Validate columns exist
     missing_cols = [c for c in column_list if c not in df.columns]
@@ -149,7 +116,7 @@ def transform(
         typer.echo(f"Available columns: {', '.join(df.columns)}")
         raise typer.Exit(1)
 
-    # Step 8: Apply transformation
+    # 6. Apply transformation
     df_transformed = df.copy()
 
     for col in column_list:
@@ -190,7 +157,7 @@ def transform(
         elif operation == "length":
             df_transformed[col] = df_transformed[col].astype(str).str.len()
 
-    # Step 9: Display summary
+    # 7. Display summary
     typer.echo(f"Transformed {len(column_list)} column(s)")
     typer.echo(f"Columns: {', '.join(column_list)}")
     if has_math_op:
@@ -200,25 +167,16 @@ def transform(
     typer.echo(f"Rows: {original_count}")
     typer.echo("")
 
-    # Step 10: Handle dry-run mode
+    # 8. Handle dry-run mode
     if dry_run:
         typer.echo("Preview of transformed data:")
         preview_rows = min(5, original_count)
         display_table(df_transformed.head(preview_rows))
         raise typer.Exit(0)
 
-    # Step 11: Write output or display
-    if output:
-        output_path = Path(output)
-        write_result = factory.write_file(df_transformed, output_path)
-        if is_err(write_result):
-            error = unwrap_err(write_result)
-            typer.echo(f"Error writing file: {error}", err=True)
-            raise typer.Exit(1)
-        typer.echo(f"Written to: {output}")
-    else:
-        # Display data
-        display_table(df_transformed)
+    # 9. Write or display
+    factory = HandlerFactory()
+    write_or_display(df_transformed, factory, output, "table")
 
 
 # Create CLI app for this command
