@@ -4,14 +4,17 @@ Concatenate multiple datasets vertically by adding rows.
 """
 
 from pathlib import Path
-from typing import Any
 
 import typer
 import pandas as pd
 
-from excel_toolkit.core import HandlerFactory, ExcelHandler, CSVHandler
+from excel_toolkit.core import HandlerFactory
 from excel_toolkit.fp import is_ok, is_err, unwrap, unwrap_err
-from excel_toolkit.commands.common import display_table
+from excel_toolkit.commands.common import (
+    read_data_file,
+    write_or_display,
+    display_table,
+)
 
 
 def append(
@@ -33,104 +36,31 @@ def append(
         xl append main.csv extra.csv --ignore-index --output combined.csv
         xl append main.xlsx additional.xlsx --sort --output sorted.xlsx
     """
-    factory = HandlerFactory()
+    # 1. Read main file
+    main_df = read_data_file(main_file, sheet)
 
-    # Step 1: Validate all files exist
-    main_path = Path(main_file)
-    if not main_path.exists():
-        typer.echo(f"Main file not found: {main_file}", err=True)
-        raise typer.Exit(1)
-
-    additional_paths = [Path(f) for f in additional_files]
-    for f in additional_paths:
-        if not f.exists():
-            typer.echo(f"File not found: {f}", err=True)
-            raise typer.Exit(1)
-
-    # Step 2: Read main file
-    handler_result = factory.get_handler(main_path)
-    if is_err(handler_result):
-        error = unwrap_err(handler_result)
-        typer.echo(f"{error}", err=True)
-        raise typer.Exit(1)
-
-    handler = unwrap(handler_result)
-
-    # Read main file
-    if isinstance(handler, ExcelHandler):
-        sheet_name = sheet
-        kwargs = {"sheet_name": sheet_name} if sheet_name else {}
-        read_result = handler.read(main_path, **kwargs)
-    elif isinstance(handler, CSVHandler):
-        encoding_result = handler.detect_encoding(main_path)
-        encoding = unwrap(encoding_result) if is_ok(encoding_result) else "utf-8"
-
-        delimiter_result = handler.detect_delimiter(main_path, encoding)
-        delimiter = unwrap(delimiter_result) if is_ok(delimiter_result) else ","
-
-        read_result = handler.read(main_path, encoding=encoding, delimiter=delimiter)
-    else:
-        typer.echo("Unsupported handler type", err=True)
-        raise typer.Exit(1)
-
-    if is_err(read_result):
-        error = unwrap_err(read_result)
-        typer.echo(f"Error reading main file: {error}", err=True)
-        raise typer.Exit(1)
-
-    main_df = unwrap(read_result)
-
-    # Step 3: Handle empty main file
+    # 2. Handle empty main file
     if main_df.empty:
         typer.echo("Main file is empty (no data rows)")
         raise typer.Exit(0)
 
-    # Step 4: Read and append additional files
+    # 3. Read and append additional files
     dfs = [main_df]
     total_main_rows = len(main_df)
 
-    for i, file_path in enumerate(additional_paths):
-        # Get handler for this file
-        file_handler_result = factory.get_handler(file_path)
-        if is_err(file_handler_result):
-            error = unwrap_err(file_handler_result)
-            typer.echo(f"Error with file {file_path.name}: {error}", err=True)
-            raise typer.Exit(1)
-
-        file_handler = unwrap(file_handler_result)
-
+    for i, file_path in enumerate(additional_files):
         # Determine sheet name for this file
         file_sheet = None
         if additional_sheets and i < len(additional_sheets):
             file_sheet = additional_sheets[i]
 
-        # Read file
-        if isinstance(file_handler, ExcelHandler):
-            kwargs = {"sheet_name": file_sheet} if file_sheet else {}
-            file_read_result = file_handler.read(file_path, **kwargs)
-        elif isinstance(file_handler, CSVHandler):
-            enc_result = file_handler.detect_encoding(file_path)
-            file_encoding = unwrap(enc_result) if is_ok(enc_result) else "utf-8"
-
-            del_result = file_handler.detect_delimiter(file_path, file_encoding)
-            file_delimiter = unwrap(del_result) if is_ok(del_result) else ","
-
-            file_read_result = file_handler.read(file_path, encoding=file_encoding, delimiter=file_delimiter)
-        else:
-            typer.echo(f"Unsupported file type: {file_path.name}", err=True)
-            raise typer.Exit(1)
-
-        if is_err(file_read_result):
-            error = unwrap_err(file_read_result)
-            typer.echo(f"Error reading {file_path.name}: {error}", err=True)
-            raise typer.Exit(1)
-
-        file_df = unwrap(file_read_result)
+        # Read file using helper
+        file_df = read_data_file(str(file_path), file_sheet)
 
         # Check column compatibility
         if not file_df.empty:
             if list(file_df.columns) != list(main_df.columns):
-                typer.echo(f"Warning: Column mismatch in {file_path.name}", err=True)
+                typer.echo(f"Warning: Column mismatch in {Path(file_path).name}", err=True)
                 typer.echo(f"  Expected: {', '.join(main_df.columns)}", err=True)
                 typer.echo(f"  Found: {', '.join(file_df.columns)}", err=True)
                 typer.echo("  Attempting to align columns...", err=True)
@@ -140,7 +70,7 @@ def append(
 
             dfs.append(file_df)
 
-    # Step 5: Concatenate all DataFrames
+    # 4. Concatenate all DataFrames
     if ignore_index:
         result_df = pd.concat(dfs, ignore_index=True)
     else:
@@ -149,28 +79,23 @@ def append(
     total_rows = len(result_df)
     appended_rows = total_rows - total_main_rows
 
-    # Step 6: Sort if requested
+    # 5. Sort if requested
     if sort:
         first_col = result_df.columns[0]
         result_df = result_df.sort_values(by=first_col)
         result_df = result_df.reset_index(drop=True)
 
-    # Step 7: Display summary
+    # 6. Display summary
     typer.echo(f"Main file rows: {total_main_rows}")
     typer.echo(f"Appended rows: {appended_rows}")
     typer.echo(f"Total rows: {total_rows}")
     typer.echo(f"Files processed: {len(dfs)}")
     typer.echo("")
 
-    # Step 8: Write output or display
+    # 7. Write or display
+    factory = HandlerFactory()
     if output:
-        output_path = Path(output)
-        write_result = factory.write_file(result_df, output_path)
-        if is_err(write_result):
-            error = unwrap_err(write_result)
-            typer.echo(f"Error writing file: {error}", err=True)
-            raise typer.Exit(1)
-        typer.echo(f"Written to: {output}")
+        write_or_display(result_df, factory, output, "table")
     else:
         # Display result
         display_table(result_df.head(20))

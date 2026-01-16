@@ -4,14 +4,18 @@ Remove leading and trailing whitespace from cell values.
 """
 
 from pathlib import Path
-from typing import Any
 
 import typer
 import pandas as pd
 
-from excel_toolkit.core import HandlerFactory, ExcelHandler, CSVHandler
+from excel_toolkit.core import HandlerFactory
 from excel_toolkit.fp import is_ok, is_err, unwrap, unwrap_err
-from excel_toolkit.commands.common import display_table
+from excel_toolkit.operations.cleaning import trim_whitespace
+from excel_toolkit.commands.common import (
+    read_data_file,
+    write_or_display,
+    display_table,
+)
 
 
 def strip(
@@ -32,55 +36,16 @@ def strip(
         xl strip data.csv --columns "Name,Email" --output cleaned.csv
         xl strip data.xlsx --left --right --output cleaned.xlsx
     """
-    path = Path(file_path)
-    factory = HandlerFactory()
-
-    # Step 1: Validate file exists
-    if not path.exists():
-        typer.echo(f"File not found: {file_path}", err=True)
-        raise typer.Exit(1)
-
-    # Step 2: Get handler
-    handler_result = factory.get_handler(path)
-    if is_err(handler_result):
-        error = unwrap_err(handler_result)
-        typer.echo(f"{error}", err=True)
-        raise typer.Exit(1)
-
-    handler = unwrap(handler_result)
-
-    # Step 3: Read file
-    if isinstance(handler, ExcelHandler):
-        sheet_name = sheet
-        kwargs = {"sheet_name": sheet_name} if sheet_name else {}
-        read_result = handler.read(path, **kwargs)
-    elif isinstance(handler, CSVHandler):
-        # Auto-detect encoding and delimiter
-        encoding_result = handler.detect_encoding(path)
-        encoding = unwrap(encoding_result) if is_ok(encoding_result) else "utf-8"
-
-        delimiter_result = handler.detect_delimiter(path, encoding)
-        delimiter = unwrap(delimiter_result) if is_ok(delimiter_result) else ","
-
-        read_result = handler.read(path, encoding=encoding, delimiter=delimiter)
-    else:
-        typer.echo("Unsupported handler type", err=True)
-        raise typer.Exit(1)
-
-    if is_err(read_result):
-        error = unwrap_err(read_result)
-        typer.echo(f"Error reading file: {error}", err=True)
-        raise typer.Exit(1)
-
-    df = unwrap(read_result)
+    # 1. Read file
+    df = read_data_file(file_path, sheet)
     original_count = len(df)
 
-    # Step 4: Handle empty file
+    # 2. Handle empty file
     if df.empty:
         typer.echo("File is empty (no data rows)")
         raise typer.Exit(0)
 
-    # Step 5: Determine columns to process
+    # 3. Determine columns to process
     if columns:
         column_list = [c.strip() for c in columns.split(",")]
         # Validate columns exist
@@ -93,28 +58,38 @@ def strip(
         # Default: all string columns
         column_list = df.select_dtypes(include=['object']).columns.tolist()
 
-    # Step 6: Strip whitespace from specified columns
+    # 4. Count cells modified before stripping
     cells_modified = 0
-
     for col in column_list:
-        if col in df.columns:
-            # Check if column is string type
-            if df[col].dtype == 'object':
-                # Count cells with leading/trailing whitespace before stripping
-                if left and right:
-                    before = df[col].str.strip().ne(df[col]).sum()
-                    df[col] = df[col].str.strip()
-                    cells_modified += before
-                elif left:
-                    before = df[col].str.lstrip().ne(df[col]).sum()
-                    df[col] = df[col].str.lstrip()
-                    cells_modified += before
-                elif right:
-                    before = df[col].str.rstrip().ne(df[col]).sum()
-                    df[col] = df[col].str.rstrip()
-                    cells_modified += before
+        if col in df.columns and df[col].dtype == 'object':
+            if left and right:
+                cells_modified += df[col].str.strip().ne(df[col]).sum()
+            elif left:
+                cells_modified += df[col].str.lstrip().ne(df[col]).sum()
+            elif right:
+                cells_modified += df[col].str.rstrip().ne(df[col]).sum()
 
-    # Step 7: Display summary
+    # 5. Determine strip side
+    if left and right:
+        side = "both"
+    elif left:
+        side = "left"
+    elif right:
+        side = "right"
+    else:
+        side = "both"
+
+    # 6. Strip whitespace using operation
+    result = trim_whitespace(df, columns=column_list, side=side)
+
+    if is_err(result):
+        error = unwrap_err(result)
+        typer.echo(f"Error stripping whitespace: {error}", err=True)
+        raise typer.Exit(1)
+
+    df_stripped = unwrap(result)
+
+    # 7. Display summary
     typer.echo(f"Total rows: {original_count}")
     typer.echo(f"Columns processed: {len(column_list)}")
     if columns:
@@ -125,18 +100,13 @@ def strip(
     typer.echo(f"Strip mode: {'left' if left else ''}{'/' if left and right else ''}{'right' if right else ''}")
     typer.echo("")
 
-    # Step 8: Write output or display
+    # 8. Write or display
+    factory = HandlerFactory()
     if output:
-        output_path = Path(output)
-        write_result = factory.write_file(df, output_path)
-        if is_err(write_result):
-            error = unwrap_err(write_result)
-            typer.echo(f"Error writing file: {error}", err=True)
-            raise typer.Exit(1)
-        typer.echo(f"Written to: {output}")
+        write_or_display(df_stripped, factory, output, "table")
     else:
         # Display preview
-        display_table(df.head(20))
+        display_table(df_stripped.head(20))
         if original_count > 20:
             typer.echo(f"\n... and {original_count - 20} more rows")
 
