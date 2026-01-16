@@ -4,15 +4,18 @@ Select specific columns from a dataset.
 """
 
 from pathlib import Path
-from typing import Any
 
 import typer
 import pandas as pd
 import numpy as np
 
-from excel_toolkit.core import HandlerFactory, ExcelHandler, CSVHandler
+from excel_toolkit.core import HandlerFactory
 from excel_toolkit.fp import is_ok, is_err, unwrap, unwrap_err
-from excel_toolkit.commands.common import display_table
+from excel_toolkit.commands.common import (
+    read_data_file,
+    write_or_display,
+    display_table,
+)
 
 
 def select(
@@ -38,15 +41,7 @@ def select(
         xl select large.xlsx --only-numeric --output numbers.xlsx
         xl select data.xlsx --columns "id,name->full_name,email" --output renamed.xlsx
     """
-    path = Path(file_path)
-    factory = HandlerFactory()
-
-    # Step 1: Validate file exists
-    if not path.exists():
-        typer.echo(f"File not found: {file_path}", err=True)
-        raise typer.Exit(1)
-
-    # Step 2: Check selection options
+    # 1. Check selection options
     selection_options = [
         columns is not None,
         exclude is not None,
@@ -66,48 +61,17 @@ def select(
         typer.echo("Use only one of: --columns, --exclude, --only-numeric, --only-string, --only-datetime, --only-non-empty")
         raise typer.Exit(1)
 
-    # Step 3: Get handler
-    handler_result = factory.get_handler(path)
-    if is_err(handler_result):
-        error = unwrap_err(handler_result)
-        typer.echo(f"{error}", err=True)
-        raise typer.Exit(1)
-
-    handler = unwrap(handler_result)
-
-    # Step 4: Read file
-    if isinstance(handler, ExcelHandler):
-        sheet_name = sheet
-        kwargs = {"sheet_name": sheet_name} if sheet_name else {}
-        read_result = handler.read(path, **kwargs)
-    elif isinstance(handler, CSVHandler):
-        # Auto-detect encoding and delimiter
-        encoding_result = handler.detect_encoding(path)
-        encoding = unwrap(encoding_result) if is_ok(encoding_result) else "utf-8"
-
-        delimiter_result = handler.detect_delimiter(path, encoding)
-        delimiter = unwrap(delimiter_result) if is_ok(delimiter_result) else ","
-
-        read_result = handler.read(path, encoding=encoding, delimiter=delimiter)
-    else:
-        typer.echo("Unsupported handler type", err=True)
-        raise typer.Exit(1)
-
-    if is_err(read_result):
-        error = unwrap_err(read_result)
-        typer.echo(f"Error reading file: {error}", err=True)
-        raise typer.Exit(1)
-
-    df = unwrap(read_result)
+    # 2. Read file
+    df = read_data_file(file_path, sheet)
     original_count = len(df)
     original_cols = len(df.columns)
 
-    # Step 5: Handle empty file
+    # 3. Handle empty file
     if df.empty:
         typer.echo("File is empty (no data rows)")
         raise typer.Exit(0)
 
-    # Step 6: Determine columns to select
+    # 4. Determine columns to select
     selected_columns = []
 
     if columns:
@@ -131,15 +95,13 @@ def select(
     elif only_datetime:
         selected_columns = df.select_dtypes(include=['datetime64']).columns.tolist()
     elif only_non_empty:
-        for col in df.columns:
-            if df[col].notna().all():
-                selected_columns.append(col)
+        selected_columns = [col for col in df.columns if df[col].notna().all()]
 
     if not selected_columns:
         typer.echo("No columns match the selection criteria")
         raise typer.Exit(0)
 
-    # Step 7: Validate column names exist
+    # 5. Validate and select columns
     if columns:
         # Parse original column names (before renaming)
         column_names = []
@@ -165,11 +127,7 @@ def select(
             raise typer.Exit(1)
 
         # Select columns
-        try:
-            df_selected = df[column_names].copy()
-        except Exception as e:
-            typer.echo(f"Error selecting columns: {str(e)}", err=True)
-            raise typer.Exit(1)
+        df_selected = df[column_names].copy()
 
         # Apply renaming if specified
         if rename_mapping:
@@ -177,16 +135,8 @@ def select(
             selected_column_names = [rename_mapping.get(c, c) for c in column_names]
         else:
             selected_column_names = column_names
-
     else:
-        # For other selection methods, validate columns exist
-        if columns or exclude:
-            missing_cols = [c for c in selected_columns if c not in df.columns]
-            if missing_cols:
-                typer.echo(f"Error: Columns not found: {', '.join(missing_cols)}", err=True)
-                typer.echo(f"Available columns: {', '.join(df.columns)}")
-                raise typer.Exit(1)
-
+        # For other selection methods
         try:
             df_selected = df[selected_columns].copy()
         except Exception as e:
@@ -195,7 +145,7 @@ def select(
 
         selected_column_names = selected_columns
 
-    # Step 8: Display summary
+    # 6. Display summary
     typer.echo(f"Selected {len(selected_column_names)} of {original_cols} columns")
     if columns:
         typer.echo(f"Columns: {', '.join(selected_column_names)}")
@@ -212,25 +162,16 @@ def select(
     typer.echo(f"Rows: {original_count}")
     typer.echo("")
 
-    # Step 9: Handle dry-run mode
+    # 7. Handle dry-run mode
     if dry_run:
         typer.echo("Preview of selected data:")
         preview_rows = min(5, original_count)
         display_table(df_selected.head(preview_rows))
         raise typer.Exit(0)
 
-    # Step 10: Write output or display
-    if output:
-        output_path = Path(output)
-        write_result = factory.write_file(df_selected, output_path)
-        if is_err(write_result):
-            error = unwrap_err(write_result)
-            typer.echo(f"Error writing file: {error}", err=True)
-            raise typer.Exit(1)
-        typer.echo(f"Written to: {output}")
-    else:
-        # Display data
-        display_table(df_selected)
+    # 8. Write or display
+    factory = HandlerFactory()
+    write_or_display(df_selected, factory, output, "table")
 
 
 # Create CLI app for this command
