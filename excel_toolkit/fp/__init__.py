@@ -37,6 +37,9 @@ from excel_toolkit.fp.maybe import (
     to_maybe,
 )
 
+# Immutable utilities
+from excel_toolkit.fp.immutable import immutable
+
 __all__ = [
     # Result
     "ok",
@@ -58,4 +61,6 @@ __all__ = [
     "unwrap_or_maybe",
     "unwrap_or_else_maybe",
     "to_maybe",
+    # Utilities
+    "immutable",
 ]
