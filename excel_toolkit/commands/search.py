@@ -4,15 +4,18 @@ Search for patterns in a dataset.
 """
 
 from pathlib import Path
-from typing import Any
 
 import typer
 import pandas as pd
 import re
 
-from excel_toolkit.core import HandlerFactory, ExcelHandler, CSVHandler
+from excel_toolkit.core import HandlerFactory
 from excel_toolkit.fp import is_ok, is_err, unwrap, unwrap_err
-from excel_toolkit.commands.common import display_table
+from excel_toolkit.commands.common import (
+    read_data_file,
+    write_or_display,
+    display_table,
+)
 
 
 def search(
@@ -34,60 +37,21 @@ def search(
         xl search data.csv --pattern "^[A-Z]" --regex --columns "Name"
         xl search logs.xlsx --pattern "error|warning" --regex --case-sensitive
     """
-    path = Path(file_path)
-    factory = HandlerFactory()
-
-    # Step 1: Validate file exists
-    if not path.exists():
-        typer.echo(f"File not found: {file_path}", err=True)
-        raise typer.Exit(1)
-
-    # Step 2: Validate pattern specified
+    # 1. Validate pattern specified
     if not pattern:
         typer.echo("Error: Must specify --pattern", err=True)
         raise typer.Exit(1)
 
-    # Step 3: Get handler
-    handler_result = factory.get_handler(path)
-    if is_err(handler_result):
-        error = unwrap_err(handler_result)
-        typer.echo(f"{error}", err=True)
-        raise typer.Exit(1)
-
-    handler = unwrap(handler_result)
-
-    # Step 4: Read file
-    if isinstance(handler, ExcelHandler):
-        sheet_name = sheet
-        kwargs = {"sheet_name": sheet_name} if sheet_name else {}
-        read_result = handler.read(path, **kwargs)
-    elif isinstance(handler, CSVHandler):
-        # Auto-detect encoding and delimiter
-        encoding_result = handler.detect_encoding(path)
-        encoding = unwrap(encoding_result) if is_ok(encoding_result) else "utf-8"
-
-        delimiter_result = handler.detect_delimiter(path, encoding)
-        delimiter = unwrap(delimiter_result) if is_ok(delimiter_result) else ","
-
-        read_result = handler.read(path, encoding=encoding, delimiter=delimiter)
-    else:
-        typer.echo("Unsupported handler type", err=True)
-        raise typer.Exit(1)
-
-    if is_err(read_result):
-        error = unwrap_err(read_result)
-        typer.echo(f"Error reading file: {error}", err=True)
-        raise typer.Exit(1)
-
-    df = unwrap(read_result)
+    # 2. Read file
+    df = read_data_file(file_path, sheet)
     original_count = len(df)
 
-    # Step 5: Handle empty file
+    # 3. Handle empty file
     if df.empty:
         typer.echo("File is empty (no data rows)")
         raise typer.Exit(0)
 
-    # Step 6: Determine columns to search
+    # 4. Determine columns to search
     if columns:
         column_list = [c.strip() for c in columns.split(",")]
         # Validate columns exist
@@ -101,7 +65,7 @@ def search(
         # Search all columns
         search_columns = df.columns.tolist()
 
-    # Step 7: Compile regex pattern if needed
+    # 5. Compile regex pattern if needed
     flags = 0 if case_sensitive else re.IGNORECASE
 
     if regex:
@@ -115,7 +79,7 @@ def search(
         pattern_literal = re.escape(pattern)
         search_pattern = re.compile(pattern_literal, flags)
 
-    # Step 8: Search for pattern
+    # 6. Search for pattern
     matches = []
 
     for col in search_columns:
@@ -141,14 +105,14 @@ def search(
         typer.echo(f"No matches found for pattern: {pattern}")
         raise typer.Exit(0)
 
-    # Step 9: Create results DataFrame
+    # 7. Create results DataFrame
     df_results = pd.DataFrame(matches)
 
     # Get matching rows (unique rows that have at least one match)
     matching_row_indices = df_results['row'].unique()
     df_matched = df.loc[matching_row_indices].reset_index(drop=True)
 
-    # Step 10: Display summary
+    # 8. Display summary
     typer.echo(f"Pattern: {pattern}")
     if columns:
         typer.echo(f"Columns: {', '.join(search_columns)}")
@@ -160,15 +124,10 @@ def search(
     typer.echo(f"Regex: {regex}")
     typer.echo("")
 
-    # Step 11: Write output or display
+    # 9. Write or display
+    factory = HandlerFactory()
     if output:
-        output_path = Path(output)
-        write_result = factory.write_file(df_matched, output_path)
-        if is_err(write_result):
-            error = unwrap_err(write_result)
-            typer.echo(f"Error writing file: {error}", err=True)
-            raise typer.Exit(1)
-        typer.echo(f"Written to: {output}")
+        write_or_display(df_matched, factory, output, "table")
     else:
         # Display matching rows
         display_table(df_matched)
