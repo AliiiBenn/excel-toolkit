@@ -4,14 +4,17 @@ Count occurrences of unique values in specified columns.
 """
 
 from pathlib import Path
-from typing import Any
 
 import typer
 import pandas as pd
 
-from excel_toolkit.core import HandlerFactory, ExcelHandler, CSVHandler
+from excel_toolkit.core import HandlerFactory
 from excel_toolkit.fp import is_ok, is_err, unwrap, unwrap_err
-from excel_toolkit.commands.common import display_table
+from excel_toolkit.commands.common import (
+    read_data_file,
+    write_or_display,
+    display_table,
+)
 
 
 def count(
@@ -33,62 +36,23 @@ def count(
         xl count data.xlsx --columns "Product" --sort count --output top-products.xlsx
         xl count data.xlsx --columns "Category" --sort name --ascending --output categories.xlsx
     """
-    path = Path(file_path)
-    factory = HandlerFactory()
-
-    # Step 1: Validate file exists
-    if not path.exists():
-        typer.echo(f"File not found: {file_path}", err=True)
-        raise typer.Exit(1)
-
-    # Step 2: Validate sort option
+    # 1. Validate sort option
     valid_sort_values = ["count", "name", "none", None]
     if sort not in valid_sort_values:
         typer.echo(f"Error: Invalid sort value '{sort}'", err=True)
         typer.echo("Valid values: count, name, none")
         raise typer.Exit(1)
 
-    # Step 3: Get handler
-    handler_result = factory.get_handler(path)
-    if is_err(handler_result):
-        error = unwrap_err(handler_result)
-        typer.echo(f"{error}", err=True)
-        raise typer.Exit(1)
-
-    handler = unwrap(handler_result)
-
-    # Step 4: Read file
-    if isinstance(handler, ExcelHandler):
-        sheet_name = sheet
-        kwargs = {"sheet_name": sheet_name} if sheet_name else {}
-        read_result = handler.read(path, **kwargs)
-    elif isinstance(handler, CSVHandler):
-        # Auto-detect encoding and delimiter
-        encoding_result = handler.detect_encoding(path)
-        encoding = unwrap(encoding_result) if is_ok(encoding_result) else "utf-8"
-
-        delimiter_result = handler.detect_delimiter(path, encoding)
-        delimiter = unwrap(delimiter_result) if is_ok(delimiter_result) else ","
-
-        read_result = handler.read(path, encoding=encoding, delimiter=delimiter)
-    else:
-        typer.echo("Unsupported handler type", err=True)
-        raise typer.Exit(1)
-
-    if is_err(read_result):
-        error = unwrap_err(read_result)
-        typer.echo(f"Error reading file: {error}", err=True)
-        raise typer.Exit(1)
-
-    df = unwrap(read_result)
+    # 2. Read file
+    df = read_data_file(file_path, sheet)
     original_count = len(df)
 
-    # Step 5: Handle empty file
+    # 3. Handle empty file
     if df.empty:
         typer.echo("File is empty (no data rows)")
         raise typer.Exit(0)
 
-    # Step 6: Parse columns
+    # 4. Parse columns
     column_list = [c.strip() for c in columns.split(",")]
     # Validate columns exist
     missing_cols = [c for c in column_list if c not in df.columns]
@@ -97,7 +61,7 @@ def count(
         typer.echo(f"Available columns: {', '.join(df.columns)}")
         raise typer.Exit(1)
 
-    # Step 7: Count occurrences for each column
+    # 5. Count occurrences for each column
     count_dfs = []
 
     for col in column_list:
@@ -118,7 +82,7 @@ def count(
     else:
         df_counts = pd.concat(count_dfs, ignore_index=True)
 
-    # Step 8: Sort if requested
+    # 6. Sort if requested
     if sort == "count":
         # Sort by count (descending by default)
         sort_column = 'count'
@@ -136,25 +100,16 @@ def count(
     # Reset index after sorting
     df_counts = df_counts.reset_index(drop=True)
 
-    # Step 9: Display summary
+    # 7. Display summary
     typer.echo(f"Total rows: {original_count}")
     typer.echo(f"Columns: {', '.join(column_list)}")
     if sort:
         typer.echo(f"Sorted by: {sort} ({'ascending' if ascending else 'descending'})")
     typer.echo("")
 
-    # Step 10: Write output or display
-    if output:
-        output_path = Path(output)
-        write_result = factory.write_file(df_counts, output_path)
-        if is_err(write_result):
-            error = unwrap_err(write_result)
-            typer.echo(f"Error writing file: {error}", err=True)
-            raise typer.Exit(1)
-        typer.echo(f"Written to: {output}")
-    else:
-        # Display counts
-        display_table(df_counts)
+    # 8. Write or display
+    factory = HandlerFactory()
+    write_or_display(df_counts, factory, output, "table")
 
 
 # Create CLI app for this command

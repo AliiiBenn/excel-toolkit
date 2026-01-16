@@ -4,14 +4,14 @@ Displays the first N rows of a data file in various formats.
 """
 
 from pathlib import Path
-from typing import Any
 
 import typer
 import pandas as pd
 
-from excel_toolkit.core import HandlerFactory, ExcelHandler, CSVHandler
+from excel_toolkit.core import HandlerFactory
 from excel_toolkit.fp import is_ok, is_err, unwrap, unwrap_err
 from excel_toolkit.commands.common import (
+    read_data_file,
     display_table,
     display_csv,
     display_json,
@@ -44,104 +44,39 @@ def head(
     Raises:
         typer.Exit: If file cannot be read
     """
-    path = Path(file_path)
-    factory = HandlerFactory()
+    # 1. Read file
+    df = read_data_file(file_path, sheet)
 
-    # Step 1: Validate file exists
-    if not path.exists():
-        typer.echo(f"File not found: {file_path}", err=True)
-        raise typer.Exit(1)
-
-    # Step 2: Get handler
-    handler_result = factory.get_handler(path)
-    if is_err(handler_result):
-        error = unwrap_err(handler_result)
-        typer.echo(f"{error}", err=True)
-        typer.echo("\nSupported formats: .xlsx, .xls, .csv")
-        raise typer.Exit(1)
-
-    handler = unwrap(handler_result)
-
-    # Step 3: Read file
-    if isinstance(handler, ExcelHandler):
-        # Determine which sheet to read
-        sheet_name = sheet
-        if sheet_name is None:
-            # Get first sheet name
-            names_result = handler.get_sheet_names(path)
-            if is_ok(names_result):
-                sheets = unwrap(names_result)
-                sheet_name = sheets[0] if sheets else None
-
-        # Read Excel file
-        kwargs = {"sheet_name": sheet_name} if sheet_name else {}
-        read_result = handler.read(path, **kwargs)
-
-        if is_err(read_result):
-            error = unwrap_err(read_result)
-            typer.echo(f"Error reading Excel file: {error}", err=True)
-            raise typer.Exit(1)
-
-    elif isinstance(handler, CSVHandler):
-        # Detect encoding
-        encoding_result = handler.detect_encoding(path)
-        encoding = unwrap(encoding_result) if is_ok(encoding_result) else "utf-8"
-
-        # Detect delimiter
-        delimiter_result = handler.detect_delimiter(path, encoding)
-        delimiter = unwrap(delimiter_result) if is_ok(delimiter_result) else ","
-
-        # Read CSV file
-        read_result = handler.read(path, encoding=encoding, delimiter=delimiter)
-
-        if is_err(read_result):
-            error = unwrap_err(read_result)
-            typer.echo(f"Error reading CSV file: {error}", err=True)
-            raise typer.Exit(1)
-    else:
-        typer.echo(f"Unsupported handler type", err=True)
-        raise typer.Exit(1)
-
-    df = unwrap(read_result)
-
-    # Step 4: Handle empty DataFrame
+    # 2. Handle empty file
     if df.empty:
         typer.echo("File is empty (no data rows)")
         raise typer.Exit(0)
 
-    # Step 5: Get first N rows
+    # 3. Limit columns if requested
+    if max_columns and len(df.columns) > max_columns:
+        df = df.iloc[:, :max_columns]
+
+    # 4. Get first N rows
     df_head = df.head(rows)
 
-    # Step 6: Display file info
-    sheet_name_display = sheet_name if isinstance(handler, ExcelHandler) else None
-    file_info = format_file_info(
-        str(path), sheet=sheet_name_display, total_rows=len(df), total_cols=len(df.columns)
-    )
-    typer.echo(file_info)
+    # 5. Display file info
+    path = Path(file_path)
+    format_file_info(path, len(df), len(df.columns))
 
-    # Step 7: Show column info if requested
+    # 6. Show column information if requested
     if show_columns:
         display_column_types(df)
-        typer.echo("")  # Empty line before data
 
-    # Step 8: Display data in requested format
-    try:
-        if format == "table":
-            display_table(df_head, max_columns=max_columns)
-        elif format == "csv":
-            display_csv(df_head)
-        elif format == "json":
-            display_json(df_head)
-        else:
-            typer.echo(f"Unknown format: {format}", err=True)
-            typer.echo("Supported formats: table, csv, json")
-            raise typer.Exit(1)
-    except Exception as e:
-        typer.echo(f"Error displaying data: {str(e)}", err=True)
-        raise typer.Exit(1)
+    # 7. Display data based on format
+    if format == "table":
+        display_table(df_head)
+    elif format == "csv":
+        display_csv(df_head)
+    elif format == "json":
+        display_json(df_head)
 
 
-# Create CLI app for this command (can be used standalone or imported)
+# Create CLI app for this command
 app = typer.Typer(help="Display the first N rows of a data file")
 
 # Register the command
