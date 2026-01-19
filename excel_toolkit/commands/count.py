@@ -23,13 +23,14 @@ def count(
     columns: str = typer.Option(..., "--columns", "-c", help="Columns to count (comma-separated)"),
     sort: str | None = typer.Option(None, "--sort", help="Sort by: count, name, or none"),
     ascending: bool = typer.Option(False, "--ascending", help="Sort in ascending order"),
+    limit: int | None = typer.Option(None, "--limit", "-n", help="Limit number of results"),
     output: str | None = typer.Option(None, "--output", "-o", help="Output file path"),
     sheet: str | None = typer.Option(None, "--sheet", "-s", help="Sheet name for Excel files"),
 ) -> None:
     """Count occurrences of unique values in specified columns.
 
     Count the frequency of unique values in one or more columns.
-    Results can be sorted by count or name.
+    Results can be sorted by count or name, and limited to top N results.
 
     Column references can be:
         - Column name: "Region"
@@ -39,10 +40,10 @@ def count(
     Examples:
         xl count data.xlsx --columns "Status" --output counts.xlsx
         xl count data.csv --columns "Region,Category" --output counts.xlsx
-        xl count data.xlsx --columns "Product" --sort count --output top-products.xlsx
-        xl count data.xlsx --columns "Category" --sort name --ascending --output categories.xlsx
-        xl count data.xlsx --columns "3" --sort count --output third-col-counts.xlsx
-        xl count data.xlsx --columns "-1" --output last-col-counts.xlsx
+        xl count data.xlsx --columns "Product" --sort count --limit 10
+        xl count data.xlsx --columns "Category" --sort name -n 15
+        xl count data.xlsx --columns "3" --sort count --limit 20
+        xl count data.xlsx --columns "Product" --sort count -n 10
     """
     # 1. Validate sort option
     valid_sort_values = ["count", "name", "none", None]
@@ -104,11 +105,20 @@ def count(
     # Reset index after sorting
     df_counts = df_counts.reset_index(drop=True)
 
+    # 6.5. Apply limit if specified
+    if limit is not None:
+        if limit <= 0:
+            typer.echo(f"Error: Limit must be a positive integer", err=True)
+            raise typer.Exit(1)
+        df_counts = df_counts.head(limit)
+
     # 7. Display summary
     typer.echo(f"Total rows: {original_count}")
     typer.echo(f"Columns: {', '.join(column_list)}")
     if sort:
         typer.echo(f"Sorted by: {sort} ({'ascending' if ascending else 'descending'})")
+    if limit is not None:
+        typer.echo(f"Limited to: {limit} rows")
     typer.echo("")
 
     # 8. Write or display
