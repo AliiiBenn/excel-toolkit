@@ -68,7 +68,7 @@ def filter(
         raise typer.Exit(1)
 
     # 4. Normalize condition
-    normalized = normalize_condition(condition)
+    normalized = normalize_condition(condition, df)
 
     # 5. Parse columns (supports both names and indices)
     col_list = None
