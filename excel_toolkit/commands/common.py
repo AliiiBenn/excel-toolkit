@@ -264,6 +264,83 @@ def write_or_display(
             raise typer.Exit(1)
 
 
+def resolve_column_reference(
+    col_ref: str,
+    df: pd.DataFrame,
+) -> str:
+    """Resolve a column reference to a column name.
+
+    Supports both column names and position-based indexing:
+    - Integer N: Column at position N (1-based)
+    - Negative integer -N: Nth column from end (-1 = last column)
+    - String: Column name (existing behavior)
+
+    Args:
+        col_ref: Column reference (name or index)
+        df: DataFrame to resolve column from
+
+    Returns:
+        Resolved column name
+
+    Raises:
+        typer.Exit: If column reference is invalid
+    """
+    columns = df.columns.tolist()
+    num_cols = len(columns)
+
+    # Try to parse as integer index
+    try:
+        idx = int(col_ref)
+
+        # Handle negative indexing (Python-style)
+        if idx < 0:
+            idx = num_cols + idx  # -1 becomes last column
+
+        # Convert to 0-based index
+        idx -= 1
+
+        # Validate index is in range
+        if idx < 0 or idx >= num_cols:
+            typer.echo(
+                f"Error: Column index {col_ref} out of range (file has {num_cols} columns)",
+                err=True
+            )
+            typer.echo(f"Valid range: 1 to {num_cols} (or -1 to -{num_cols} for positions from end)")
+            raise typer.Exit(1)
+
+        return columns[idx]
+
+    except ValueError:
+        # Not an integer, treat as column name
+        if col_ref not in columns:
+            available = ", ".join(columns[:10])
+            if num_cols > 10:
+                available += f", ... ({num_cols} total)"
+            typer.echo(f"Error: Column '{col_ref}' not found", err=True)
+            typer.echo(f"Available columns: {available}")
+            raise typer.Exit(1)
+        return col_ref
+
+
+def resolve_column_references(
+    col_refs: list[str],
+    df: pd.DataFrame,
+) -> list[str]:
+    """Resolve multiple column references to column names.
+
+    Args:
+        col_refs: List of column references (names or indices)
+        df: DataFrame to resolve columns from
+
+    Returns:
+        List of resolved column names
+
+    Raises:
+        typer.Exit: If any column reference is invalid
+    """
+    return [resolve_column_reference(ref, df) for ref in col_refs]
+
+
 def handle_operation_error(error: Exception) -> None:
     """Handle operation errors with user-friendly messages.
 
@@ -279,35 +356,36 @@ def handle_operation_error(error: Exception) -> None:
     error_type = type(error).__name__
     error_msg = str(error)
 
-    # Map error types to user-friendly messages
-    if "ColumnNotFoundError" in error_type:
-        typer.echo(f"Error: {error_msg}", err=True)
-    elif "TypeMismatchError" in error_type:
-        typer.echo(f"Type mismatch: {error_msg}", err=True)
-    elif "ValueOutOfRangeError" in error_type:
-        typer.echo(f"Value out of range: {error_msg}", err=True)
-    elif "InvalidConditionError" in error_type:
-        typer.echo(f"Invalid condition: {error_msg}", err=True)
-    elif "FilteringError" in error_type:
-        typer.echo(f"Filter error: {error_msg}", err=True)
-    elif "SortingError" in error_type:
-        typer.echo(f"Sort error: {error_msg}", err=True)
-    elif "PivotingError" in error_type:
-        typer.echo(f"Pivot error: {error_msg}", err=True)
-    elif "AggregatingError" in error_type:
-        typer.echo(f"Aggregation error: {error_msg}", err=True)
-    elif "ComparingError" in error_type:
-        typer.echo(f"Comparison error: {error_msg}", err=True)
-    elif "CleaningError" in error_type:
-        typer.echo(f"Cleaning error: {error_msg}", err=True)
-    elif "TransformingError" in error_type:
-        typer.echo(f"Transform error: {error_msg}", err=True)
-    elif "JoiningError" in error_type:
-        typer.echo(f"Join error: {error_msg}", err=True)
-    elif "ValidationError" in error_type:
-        typer.echo(f"Validation error: {error_msg}", err=True)
-    else:
-        # Generic error handling
-        typer.echo(f"Error: {error_msg}", err=True)
+    # Map error types to user-friendly messages using match/case
+    match error_type:
+        case et if "ColumnNotFoundError" in et:
+            typer.echo(f"Error: {error_msg}", err=True)
+        case et if "TypeMismatchError" in et:
+            typer.echo(f"Type mismatch: {error_msg}", err=True)
+        case et if "ValueOutOfRangeError" in et:
+            typer.echo(f"Value out of range: {error_msg}", err=True)
+        case et if "InvalidConditionError" in et:
+            typer.echo(f"Invalid condition: {error_msg}", err=True)
+        case et if "FilteringError" in et:
+            typer.echo(f"Filter error: {error_msg}", err=True)
+        case et if "SortingError" in et:
+            typer.echo(f"Sort error: {error_msg}", err=True)
+        case et if "PivotingError" in et:
+            typer.echo(f"Pivot error: {error_msg}", err=True)
+        case et if "AggregatingError" in et:
+            typer.echo(f"Aggregation error: {error_msg}", err=True)
+        case et if "ComparingError" in et:
+            typer.echo(f"Comparison error: {error_msg}", err=True)
+        case et if "CleaningError" in et:
+            typer.echo(f"Cleaning error: {error_msg}", err=True)
+        case et if "TransformingError" in et:
+            typer.echo(f"Transform error: {error_msg}", err=True)
+        case et if "JoiningError" in et:
+            typer.echo(f"Join error: {error_msg}", err=True)
+        case et if "ValidationError" in et:
+            typer.echo(f"Validation error: {error_msg}", err=True)
+        case _:
+            # Generic error handling
+            typer.echo(f"Error: {error_msg}", err=True)
 
     raise typer.Exit(1)

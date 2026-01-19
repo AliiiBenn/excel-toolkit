@@ -34,12 +34,22 @@ def pivot(
     """Create a pivot table from data.
 
     Creates multi-dimensional pivot tables with customizable aggregations.
+    Similar to Excel PivotTables or pandas pivot_table.
+
+    Syntax Options:
+        Option 1 (separate): --values COL --aggfunc FUNC
+        Option 2 (combined):  --values COL:FUNC
+
+    Supported aggregation functions:
+        sum, mean, avg, median, min, max, count, std, var
 
     Examples:
-        xl pivot data.xlsx --rows Category --columns Year --values Sales
-        xl pivot data.csv --rows Region --columns Product --values Quantity --aggfunc sum
-        xl pivot data.xlsx --rows Date --values Price --aggfunc mean
-        xl pivot data.csv --rows City --columns Month --values Revenue --fill 0
+        xl pivot sales.xlsx --rows "Circuit" --columns "Category" --values "Sales:sum"
+        xl pivot data.xlsx --rows "Region" --columns "Product" --values "Revenue" --aggfunc "sum"
+        xl pivot data.xlsx --rows "Year,Month" --columns "Region" --values "Sales:sum,Profit:mean"
+        xl pivot data.csv --rows "Store" --values "Qty:mean"
+        xl pivot data.xlsx --rows "Date" --columns "Product" --values "Price:sum" --fill "0"
+        xl pivot data.xlsx --rows "Circuit" --columns "Category" --values "Sales:sum" --output pivot.xlsx
     """
     # 1. Read file
     df = read_data_file(file_path, sheet)
@@ -47,16 +57,55 @@ def pivot(
     # 2. Parse parameters
     row_cols = [c.strip() for c in rows.split(",")]
     col_cols = [c.strip() for c in columns.split(",")] if columns else None
-    value_cols = [c.strip() for c in values.split(",")]
 
-    # 3. Validate aggregation function
-    agg_result = validate_aggregation_function(aggfunc)
-    if is_err(agg_result):
-        error = unwrap_err(agg_result)
-        typer.echo(f"Invalid aggregation function: {error}", err=True)
-        raise typer.Exit(1)
+    # Parse values - support both "col" and "col:func" syntax
+    value_specs = [c.strip() for c in values.split(",")]
+    value_cols = []
+    value_agg_funcs = {}  # Map column name to aggregation function
 
-    agg_func_normalized = unwrap(agg_result)
+    for spec in value_specs:
+        if ":" in spec:
+            # Has "column:function" syntax
+            parts = spec.split(":", 1)
+            col_name = parts[0].strip()
+            agg_func = parts[1].strip()
+            value_cols.append(col_name)
+            value_agg_funcs[col_name] = agg_func
+        else:
+            # Just column name, use default aggfunc
+            value_cols.append(spec)
+
+    # Determine aggregation function
+    # If any value spec has a custom aggfunc, we need to handle multiple aggregations
+    if value_agg_funcs and len(value_agg_funcs) > 0:
+        # Check if all value cols use the same aggfunc
+        unique_aggs = set(value_agg_funcs.values())
+        if len(unique_aggs) == 1:
+            # All use the same aggregation, use that
+            agg_func_to_use = unique_aggs.pop()
+            agg_result = validate_aggregation_function(agg_func_to_use)
+            if is_err(agg_result):
+                error = unwrap_err(agg_result)
+                typer.echo(f"Invalid aggregation function: {error}", err=True)
+                raise typer.Exit(1)
+            agg_func_normalized = unwrap(agg_result)
+            # Clear value_agg_funcs since we're using a single agg for all
+            value_agg_funcs = {}
+        else:
+            # Multiple different aggregations - not supported yet
+            typer.echo("Error: Multiple different aggregation functions in --values not yet supported", err=True)
+            typer.echo("Use --aggfunc to specify a single aggregation for all values", err=True)
+            typer.echo(f"Found: {', '.join(unique_aggs)}", err=True)
+            raise typer.Exit(1)
+    else:
+        # Use the default aggfunc parameter
+        agg_result = validate_aggregation_function(aggfunc)
+        if is_err(agg_result):
+            error = unwrap_err(agg_result)
+            typer.echo(f"Invalid aggregation function: {error}", err=True)
+            raise typer.Exit(1)
+
+        agg_func_normalized = unwrap(agg_result)
 
     # 4. Parse fill value
     fill_val = None

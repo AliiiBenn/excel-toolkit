@@ -14,6 +14,7 @@ from excel_toolkit.commands.common import (
     read_data_file,
     write_or_display,
     display_table,
+    resolve_column_references,
 )
 
 
@@ -22,19 +23,27 @@ def count(
     columns: str = typer.Option(..., "--columns", "-c", help="Columns to count (comma-separated)"),
     sort: str | None = typer.Option(None, "--sort", help="Sort by: count, name, or none"),
     ascending: bool = typer.Option(False, "--ascending", help="Sort in ascending order"),
+    limit: int | None = typer.Option(None, "--limit", "-n", help="Limit number of results"),
     output: str | None = typer.Option(None, "--output", "-o", help="Output file path"),
     sheet: str | None = typer.Option(None, "--sheet", "-s", help="Sheet name for Excel files"),
 ) -> None:
     """Count occurrences of unique values in specified columns.
 
     Count the frequency of unique values in one or more columns.
-    Results can be sorted by count or name.
+    Results can be sorted by count or name, and limited to top N results.
+
+    Column references can be:
+        - Column name: "Region"
+        - Column index (1-based): "1"
+        - Negative index: "-1" (last column)
 
     Examples:
         xl count data.xlsx --columns "Status" --output counts.xlsx
         xl count data.csv --columns "Region,Category" --output counts.xlsx
-        xl count data.xlsx --columns "Product" --sort count --output top-products.xlsx
-        xl count data.xlsx --columns "Category" --sort name --ascending --output categories.xlsx
+        xl count data.xlsx --columns "Product" --sort count --limit 10
+        xl count data.xlsx --columns "Category" --sort name -n 15
+        xl count data.xlsx --columns "3" --sort count --limit 20
+        xl count data.xlsx --columns "Product" --sort count -n 10
     """
     # 1. Validate sort option
     valid_sort_values = ["count", "name", "none", None]
@@ -52,14 +61,10 @@ def count(
         typer.echo("File is empty (no data rows)")
         raise typer.Exit(0)
 
-    # 4. Parse columns
+    # 4. Parse columns (supports both names and indices)
     column_list = [c.strip() for c in columns.split(",")]
-    # Validate columns exist
-    missing_cols = [c for c in column_list if c not in df.columns]
-    if missing_cols:
-        typer.echo(f"Error: Columns not found: {', '.join(missing_cols)}", err=True)
-        typer.echo(f"Available columns: {', '.join(df.columns)}")
-        raise typer.Exit(1)
+    # Resolve column references (names or indices)
+    column_list = resolve_column_references(column_list, df)
 
     # 5. Count occurrences for each column
     count_dfs = []
@@ -100,11 +105,20 @@ def count(
     # Reset index after sorting
     df_counts = df_counts.reset_index(drop=True)
 
+    # 6.5. Apply limit if specified
+    if limit is not None:
+        if limit <= 0:
+            typer.echo(f"Error: Limit must be a positive integer", err=True)
+            raise typer.Exit(1)
+        df_counts = df_counts.head(limit)
+
     # 7. Display summary
     typer.echo(f"Total rows: {original_count}")
     typer.echo(f"Columns: {', '.join(column_list)}")
     if sort:
         typer.echo(f"Sorted by: {sort} ({'ascending' if ascending else 'descending'})")
+    if limit is not None:
+        typer.echo(f"Limited to: {limit} rows")
     typer.echo("")
 
     # 8. Write or display

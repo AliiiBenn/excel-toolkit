@@ -15,6 +15,7 @@ from excel_toolkit.commands.common import (
     read_data_file,
     write_or_display,
     display_table,
+    resolve_column_references,
 )
 
 
@@ -32,14 +33,20 @@ def select(
 ) -> None:
     """Select specific columns from a data file.
 
-    Select columns by name, type, or exclude unwanted columns.
+    Select columns by name, index, type, or exclude unwanted columns.
     Can reorder columns by specifying them in the desired order.
+
+    Column references can be:
+        - Column name: "id"
+        - Column index (1-based): "1"
+        - Negative index: "-1" (last column)
 
     Examples:
         xl select data.xlsx --columns "id,name,email" --output reduced.xlsx
         xl select data.csv --exclude "temp_column,internal_id"
         xl select large.xlsx --only-numeric --output numbers.xlsx
         xl select data.xlsx --columns "id,name->full_name,email" --output renamed.xlsx
+        xl select data.xlsx --columns "1,2,3" --output first-three-cols.xlsx
     """
     # 1. Check selection options
     selection_options = [
@@ -81,12 +88,8 @@ def select(
     elif exclude:
         # Exclude specified columns
         exclude_list = [c.strip() for c in exclude.split(",")]
-        # Validate excluded columns exist
-        missing_cols = [c for c in exclude_list if c not in df.columns]
-        if missing_cols:
-            typer.echo(f"Error: Columns to exclude not found: {', '.join(missing_cols)}", err=True)
-            typer.echo(f"Available columns: {', '.join(df.columns)}")
-            raise typer.Exit(1)
+        # Resolve column references (supports both names and indices)
+        exclude_list = resolve_column_references(exclude_list, df)
         selected_columns = [c for c in df.columns if c not in exclude_list]
     elif only_numeric:
         selected_columns = df.select_dtypes(include=[np.number]).columns.tolist()
@@ -119,12 +122,9 @@ def select(
                 # No renaming
                 column_names.append(spec)
 
-        # Validate columns exist
-        missing_cols = [c for c in column_names if c not in df.columns]
-        if missing_cols:
-            typer.echo(f"Error: Columns not found: {', '.join(missing_cols)}", err=True)
-            typer.echo(f"Available columns: {', '.join(df.columns)}")
-            raise typer.Exit(1)
+        # Resolve column references (supports both names and indices)
+        # This must happen before renaming validation
+        column_names = resolve_column_references(column_names, df)
 
         # Select columns
         df_selected = df[column_names].copy()

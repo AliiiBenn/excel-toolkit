@@ -127,23 +127,38 @@ def validate_condition(condition: str) -> Result[str, ValidationError]:
     return ok(condition)
 
 
-def normalize_condition(condition: str) -> str:
+def normalize_condition(condition: str, df: pd.DataFrame = None) -> str:
     """Normalize condition syntax for pandas.query().
 
     Handles special syntax and converts to pandas-compatible form.
+    Adds backticks for column names with special characters or spaces.
 
     Args:
         condition: User-provided condition
+        df: DataFrame to validate column names (optional)
 
     Returns:
         Normalized condition string
 
     Transformations:
-        1. "value is None" → "value.isna()"
-        2. "value is not None" → "value.notna()"
-        3. "value between X and Y" → "value >= X and value <= Y"
-        4. "value not in " → "value not in " (case normalization)
+        1. Wrap column names with special chars in backticks
+        2. "value is None" → "value.isna()"
+        3. "value is not None" → "value.notna()"
+        4. "value between X and Y" → "value >= X and value <= Y"
+        5. "value not in " → "value not in " (case normalization)
     """
+    # If dataframe provided, add backticks for columns with special chars
+    if df is not None:
+        for col in df.columns:
+            # Check if column name needs backticks (contains space, special char, or is a keyword)
+            if not col.replace('_', '').replace(' ', '').isalnum():
+                # Column has special characters or spaces, needs backticks
+                # Use word boundary to avoid partial matches
+                pattern = r'\b' + re.escape(col) + r'\b'
+                # Only replace if not already in backticks
+                if '`' not in condition or pattern not in condition:
+                    condition = re.sub(pattern, f'`{col}`', condition)
+
     # Convert 'value is None' to 'value.isna()'
     condition = re.sub(r"(\w+)\s+is\s+None\b", r"\1.isna()", condition)
     condition = re.sub(r"(\w+)\s+is\s+not\s+None\b", r"\1.notna()", condition)
@@ -193,7 +208,7 @@ def apply_filter(
 
     Args:
         df: Source DataFrame
-        condition: Normalized filter condition (pandas query syntax)
+        condition: Normalized filter condition (with backticks for special chars)
         columns: Optional list of columns to select after filtering
         limit: Optional maximum number of rows to return
 
@@ -207,7 +222,9 @@ def apply_filter(
         - ColumnsNotFoundError: Selected columns don't exist
     """
     try:
-        df_filtered = df.query(condition)
+        # Use Python engine for better special character support
+        # The backticks allow column names with spaces and special characters
+        df_filtered = df.query(condition, engine='python')
     except pd.errors.UndefinedVariableError as e:
         col = _extract_column_name(str(e))
         return err(ColumnNotFoundError(col, list(df.columns)))
