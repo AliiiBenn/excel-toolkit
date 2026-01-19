@@ -279,35 +279,36 @@ def handle_operation_error(error: Exception) -> None:
     error_type = type(error).__name__
     error_msg = str(error)
 
-    # Map error types to user-friendly messages
-    if "ColumnNotFoundError" in error_type:
-        typer.echo(f"Error: {error_msg}", err=True)
-    elif "TypeMismatchError" in error_type:
-        typer.echo(f"Type mismatch: {error_msg}", err=True)
-    elif "ValueOutOfRangeError" in error_type:
-        typer.echo(f"Value out of range: {error_msg}", err=True)
-    elif "InvalidConditionError" in error_type:
-        typer.echo(f"Invalid condition: {error_msg}", err=True)
-    elif "FilteringError" in error_type:
-        typer.echo(f"Filter error: {error_msg}", err=True)
-    elif "SortingError" in error_type:
-        typer.echo(f"Sort error: {error_msg}", err=True)
-    elif "PivotingError" in error_type:
-        typer.echo(f"Pivot error: {error_msg}", err=True)
-    elif "AggregatingError" in error_type:
-        typer.echo(f"Aggregation error: {error_msg}", err=True)
-    elif "ComparingError" in error_type:
-        typer.echo(f"Comparison error: {error_msg}", err=True)
-    elif "CleaningError" in error_type:
-        typer.echo(f"Cleaning error: {error_msg}", err=True)
-    elif "TransformingError" in error_type:
-        typer.echo(f"Transform error: {error_msg}", err=True)
-    elif "JoiningError" in error_type:
-        typer.echo(f"Join error: {error_msg}", err=True)
-    elif "ValidationError" in error_type:
-        typer.echo(f"Validation error: {error_msg}", err=True)
-    else:
-        # Generic error handling
-        typer.echo(f"Error: {error_msg}", err=True)
+    # Map error types to user-friendly messages using match/case
+    match error_type:
+        case et if "ColumnNotFoundError" in et:
+            typer.echo(f"Error: {error_msg}", err=True)
+        case et if "TypeMismatchError" in et:
+            typer.echo(f"Type mismatch: {error_msg}", err=True)
+        case et if "ValueOutOfRangeError" in et:
+            typer.echo(f"Value out of range: {error_msg}", err=True)
+        case et if "InvalidConditionError" in et:
+            typer.echo(f"Invalid condition: {error_msg}", err=True)
+        case et if "FilteringError" in et:
+            typer.echo(f"Filter error: {error_msg}", err=True)
+        case et if "SortingError" in et:
+            typer.echo(f"Sort error: {error_msg}", err=True)
+        case et if "PivotingError" in et:
+            typer.echo(f"Pivot error: {error_msg}", err=True)
+        case et if "AggregatingError" in et:
+            typer.echo(f"Aggregation error: {error_msg}", err=True)
+        case et if "ComparingError" in et:
+            typer.echo(f"Comparison error: {error_msg}", err=True)
+        case et if "CleaningError" in et:
+            typer.echo(f"Cleaning error: {error_msg}", err=True)
+        case et if "TransformingError" in et:
+            typer.echo(f"Transform error: {error_msg}", err=True)
+        case et if "JoiningError" in et:
+            typer.echo(f"Join error: {error_msg}", err=True)
+        case et if "ValidationError" in et:
+            typer.echo(f"Validation error: {error_msg}", err=True)
+        case _:
+            # Generic error handling
+            typer.echo(f"Error: {error_msg}", err=True)
 
     raise typer.Exit(1)
