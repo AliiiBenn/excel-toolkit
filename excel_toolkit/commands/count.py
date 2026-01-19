@@ -14,6 +14,7 @@ from excel_toolkit.commands.common import (
     read_data_file,
     write_or_display,
     display_table,
+    resolve_column_references,
 )
 
 
@@ -30,11 +31,18 @@ def count(
     Count the frequency of unique values in one or more columns.
     Results can be sorted by count or name.
 
+    Column references can be:
+        - Column name: "Region"
+        - Column index (1-based): "1"
+        - Negative index: "-1" (last column)
+
     Examples:
         xl count data.xlsx --columns "Status" --output counts.xlsx
         xl count data.csv --columns "Region,Category" --output counts.xlsx
         xl count data.xlsx --columns "Product" --sort count --output top-products.xlsx
         xl count data.xlsx --columns "Category" --sort name --ascending --output categories.xlsx
+        xl count data.xlsx --columns "3" --sort count --output third-col-counts.xlsx
+        xl count data.xlsx --columns "-1" --output last-col-counts.xlsx
     """
     # 1. Validate sort option
     valid_sort_values = ["count", "name", "none", None]
@@ -52,14 +60,10 @@ def count(
         typer.echo("File is empty (no data rows)")
         raise typer.Exit(0)
 
-    # 4. Parse columns
+    # 4. Parse columns (supports both names and indices)
     column_list = [c.strip() for c in columns.split(",")]
-    # Validate columns exist
-    missing_cols = [c for c in column_list if c not in df.columns]
-    if missing_cols:
-        typer.echo(f"Error: Columns not found: {', '.join(missing_cols)}", err=True)
-        typer.echo(f"Available columns: {', '.join(df.columns)}")
-        raise typer.Exit(1)
+    # Resolve column references (names or indices)
+    column_list = resolve_column_references(column_list, df)
 
     # 5. Count occurrences for each column
     count_dfs = []

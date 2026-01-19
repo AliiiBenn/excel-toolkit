@@ -17,6 +17,7 @@ from excel_toolkit.commands.common import (
     read_data_file,
     write_or_display,
     display_table,
+    resolve_column_references,
 )
 
 
@@ -38,11 +39,17 @@ def filter(
     - Logical: age > 25 and city == 'Paris'
     - Null: value.isna(), value.notna()
 
+    Column references can be:
+        - Column name: "name"
+        - Column index (1-based): "1"
+        - Negative index: "-1" (last column)
+
     Examples:
         xl filter data.xlsx "age > 30"
         xl filter data.csv "price > 100" --output filtered.xlsx
         xl filter data.xlsx "city == 'Paris'" --columns name,age
         xl filter data.csv "status == 'active'" --dry-run
+        xl filter data.xlsx "age > 30" --columns "1,2,3"
     """
     # 1. Read file
     df = read_data_file(file_path, sheet)
@@ -61,12 +68,14 @@ def filter(
         raise typer.Exit(1)
 
     # 4. Normalize condition
-    normalized = unwrap(normalize_condition(condition))
+    normalized = normalize_condition(condition)
 
-    # 5. Parse columns
+    # 5. Parse columns (supports both names and indices)
     col_list = None
     if columns:
         col_list = [c.strip() for c in columns.split(",")]
+        # Resolve column references (names or indices)
+        col_list = resolve_column_references(col_list, df)
 
     # 6. Apply filter
     result = apply_filter(df, normalized, columns=col_list, limit=rows)
