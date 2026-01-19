@@ -17,6 +17,7 @@ Error types are organized by category:
 from dataclasses import field
 from excel_toolkit.fp.immutable import immutable, dataclass
 from typing import Any, Callable
+from excel_toolkit.models.error_codes import ErrorCode
 
 
 # =============================================================================
@@ -104,6 +105,7 @@ class InvalidFunctionError:
 class NoColumnsError:
     """No columns specified for an operation."""
     pass
+    ERROR_CODE: int = ErrorCode.NO_COLUMNS
 
 
 @dataclass
