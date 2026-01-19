@@ -4,6 +4,9 @@ from importlib.metadata import version
 
 import typer
 
+# Configure warnings first (before importing other modules)
+from excel_toolkit.warnings_config import *  # noqa: F401, F403
+
 from excel_toolkit.commands.info import info as info_command
 from excel_toolkit.commands.head import head as head_command
 from excel_toolkit.commands.filter import filter as filter_command
