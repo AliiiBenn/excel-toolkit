@@ -19,6 +19,7 @@ from excel_toolkit.commands.common import (
     read_data_file,
     write_or_display,
     display_table,
+    resolve_column_references,
 )
 
 
@@ -35,10 +36,16 @@ def group(
     Group by specified columns and calculate aggregations for value columns.
     Supported aggregation functions: sum, mean, avg, median, min, max, count, std, var.
 
+    Column references can be:
+        - Column name: "Region"
+        - Column index (1-based): "1"
+        - Negative index: "-1" (last column)
+
     Examples:
         xl group sales.xlsx --by "Region" --aggregate "Amount:sum,Quantity:avg" --output grouped.xlsx
         xl group data.csv --by "Category,Subcategory" --aggregate "Sales:sum,Profit:mean" --output summary.xlsx
         xl group transactions.xlsx --by "Date" --aggregate "Amount:sum,Count:count" --output daily.xlsx
+        xl group data.xlsx --by "1,2" --aggregate "3:sum,4:avg" --output grouped.xlsx
     """
     # 1. Validate group columns
     if not by:
@@ -71,8 +78,20 @@ def group(
 
     agg_specs = unwrap(parse_result)
 
-    # 6. Parse group columns
+    # 6. Parse group columns (supports both names and indices)
     group_cols = [c.strip() for c in by.split(",")]
+    # Resolve column references (names or indices)
+    group_cols = resolve_column_references(group_cols, df)
+
+    # 6.5. Resolve aggregation column references (supports both names and indices)
+    agg_column_refs = list(agg_specs.keys())
+    resolved_agg_cols = resolve_column_references(agg_column_refs, df)
+
+    # Build new agg_specs with resolved column names
+    resolved_agg_specs = {}
+    for old_col, new_col in zip(agg_column_refs, resolved_agg_cols):
+        resolved_agg_specs[new_col] = agg_specs[old_col]
+    agg_specs = resolved_agg_specs
 
     # 7. Validate columns
     validation = validate_aggregation_columns(df, group_cols, list(agg_specs.keys()))

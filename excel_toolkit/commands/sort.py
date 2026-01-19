@@ -20,6 +20,7 @@ from excel_toolkit.operations.filtering import (
 from excel_toolkit.commands.common import (
     read_data_file,
     write_or_display,
+    resolve_column_references,
 )
 
 
@@ -39,12 +40,18 @@ def sort(
     Sorts data by one or more columns in ascending or descending order.
     Optionally filter rows before sorting.
 
+    Column references can be:
+        - Column name: "salary"
+        - Column index (1-based): "1"
+        - Negative index: "-1" (last column)
+
     Examples:
         xl sort data.xlsx --columns salary
         xl sort data.xlsx --columns city,age --rows 10
         xl sort data.csv --columns price --desc --output sorted.csv
         xl sort data.xlsx --columns name --where "age > 30"
         xl sort data.csv --columns date --na-placement first
+        xl sort data.xlsx --columns "3" --output third-col-sorted.xlsx
     """
     # 1. Read file
     df = read_data_file(file_path, sheet)
@@ -54,20 +61,23 @@ def sort(
         typer.echo(f"Invalid na_placement: {na_placement}. Must be 'first' or 'last'", err=True)
         raise typer.Exit(1)
 
-    # 3. Parse column list
+    # 3. Parse column list (supports both names and indices)
     column_list = [c.strip() for c in columns.split(",")]
     if not column_list:
         typer.echo("Error: At least one column must be specified", err=True)
         raise typer.Exit(1)
 
-    # 4. Validate columns
+    # 4. Resolve column references (names or indices)
+    column_list = resolve_column_references(column_list, df)
+
+    # 5. Validate columns
     validation = validate_sort_columns(df, column_list)
     if is_err(validation):
         error = unwrap_err(validation)
         typer.echo(f"Error: {error}", err=True)
         raise typer.Exit(1)
 
-    # 5. Apply filter if specified
+    # 6. Apply filter if specified
     if where:
         # Validate condition
         validation = validate_condition(where)
@@ -95,10 +105,10 @@ def sort(
         filtered_count = len(df)
 
     # 6. Build sort columns specification
-    sort_columns = [{"column": col, "ascending": not desc} for col in column_list]
+    sort_columns = column_list
 
     # 7. Sort data
-    result = sort_dataframe(df, sort_columns, na_placement=na_placement, limit=rows)
+    result = sort_dataframe(df, sort_columns, ascending=not desc, na_position=na_placement, limit=rows)
     if is_err(result):
         error = unwrap_err(result)
         typer.echo(f"Error sorting data: {error}", err=True)

@@ -81,6 +81,8 @@ def stats(
         # Resolve column reference (supports both name and index)
         resolved_column = resolve_column_reference(column, df)
         columns_to_analyze = [resolved_column]
+        # Store the resolved column name for display
+        column_for_display = resolved_column
     elif all_columns:
         columns_to_analyze = list(df.columns)
     else:
@@ -143,7 +145,7 @@ def stats(
         elif format == "table":
             if column and len(all_stats) == 1:
                 # Single column, display detailed table
-                _display_single_column_stats(column, all_stats[column])
+                _display_single_column_stats(column_for_display, all_stats[column_for_display])
             else:
                 # Multiple columns, display summary table
                 _display_multi_column_stats(all_stats)
