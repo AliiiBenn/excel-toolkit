@@ -43,12 +43,16 @@ def group(
         - Column index (1-based): "1"
         - Negative index: "-1" (last column)
 
+    Multiple aggregations on same column:
+        Use comma-separated functions: "Sales:sum,mean,min,max"
+        This creates Sales_sum, Sales_mean, Sales_min, Sales_max columns
+
     Examples:
         xl group sales.xlsx --by "Region" --aggregate "Amount:sum" --output grouped.xlsx
         xl group sales.xlsx --by "Region" --aggregate "Amount:sum" --sort desc
+        xl group sales.xlsx --by "Region" --aggregate "Sales:sum,mean,min,max" --sort desc
         xl group data.csv --by "Category" --aggregate "Sales:sum,Profit:mean" --sort asc
-        xl group transactions.xlsx --by "Date" --aggregate "Amount:sum,Count:count" --sort desc --sort-column "Amount_sum"
-        xl group data.xlsx --by "1,2" --aggregate "3:sum" --sort desc
+        xl group data.xlsx --by "1,2" --aggregate "3:sum,count" --sort desc
     """
     # 1. Validate group columns
     if not by:
