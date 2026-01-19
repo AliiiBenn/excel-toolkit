@@ -264,6 +264,83 @@ def write_or_display(
             raise typer.Exit(1)
 
 
+def resolve_column_reference(
+    col_ref: str,
+    df: pd.DataFrame,
+) -> str:
+    """Resolve a column reference to a column name.
+
+    Supports both column names and position-based indexing:
+    - Integer N: Column at position N (1-based)
+    - Negative integer -N: Nth column from end (-1 = last column)
+    - String: Column name (existing behavior)
+
+    Args:
+        col_ref: Column reference (name or index)
+        df: DataFrame to resolve column from
+
+    Returns:
+        Resolved column name
+
+    Raises:
+        typer.Exit: If column reference is invalid
+    """
+    columns = df.columns.tolist()
+    num_cols = len(columns)
+
+    # Try to parse as integer index
+    try:
+        idx = int(col_ref)
+
+        # Handle negative indexing (Python-style)
+        if idx < 0:
+            idx = num_cols + idx  # -1 becomes last column
+
+        # Convert to 0-based index
+        idx -= 1
+
+        # Validate index is in range
+        if idx < 0 or idx >= num_cols:
+            typer.echo(
+                f"Error: Column index {col_ref} out of range (file has {num_cols} columns)",
+                err=True
+            )
+            typer.echo(f"Valid range: 1 to {num_cols} (or -1 to -{num_cols} for positions from end)")
+            raise typer.Exit(1)
+
+        return columns[idx]
+
+    except ValueError:
+        # Not an integer, treat as column name
+        if col_ref not in columns:
+            available = ", ".join(columns[:10])
+            if num_cols > 10:
+                available += f", ... ({num_cols} total)"
+            typer.echo(f"Error: Column '{col_ref}' not found", err=True)
+            typer.echo(f"Available columns: {available}")
+            raise typer.Exit(1)
+        return col_ref
+
+
+def resolve_column_references(
+    col_refs: list[str],
+    df: pd.DataFrame,
+) -> list[str]:
+    """Resolve multiple column references to column names.
+
+    Args:
+        col_refs: List of column references (names or indices)
+        df: DataFrame to resolve columns from
+
+    Returns:
+        List of resolved column names
+
+    Raises:
+        typer.Exit: If any column reference is invalid
+    """
+    return [resolve_column_reference(ref, df) for ref in col_refs]
+
+
 def handle_operation_error(error: Exception) -> None:
     """Handle operation errors with user-friendly messages.
 

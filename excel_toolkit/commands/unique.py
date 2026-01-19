@@ -14,6 +14,7 @@ from excel_toolkit.commands.common import (
     read_data_file,
     write_or_display,
     display_table,
+    resolve_column_references,
 )
 
 
@@ -29,10 +30,17 @@ def unique(
 
     Get unique values from specified columns or unique rows across all columns.
 
+    Column references can be:
+        - Column name: "Category"
+        - Column index (1-based): "1"
+        - Negative index: "-1" (last column)
+
     Examples:
         xl unique data.xlsx --columns "Category" --output categories.xlsx
         xl unique data.csv --columns "Region,Product" --output unique.xlsx
         xl unique contacts.xlsx --columns "Email" --count --output email-counts.xlsx
+        xl unique data.xlsx --columns "3" --output third-col-unique.xlsx
+        xl unique data.xlsx --columns "-1" --output last-col-unique.xlsx
     """
     # 1. Validate columns specified
     if not columns:
@@ -48,14 +56,10 @@ def unique(
         typer.echo("File is empty (no data rows)")
         raise typer.Exit(0)
 
-    # 4. Parse columns
+    # 4. Parse columns (supports both names and indices)
     column_list = [c.strip() for c in columns.split(",")]
-    # Validate columns exist
-    missing_cols = [c for c in column_list if c not in df.columns]
-    if missing_cols:
-        typer.echo(f"Error: Columns not found: {', '.join(missing_cols)}", err=True)
-        typer.echo(f"Available columns: {', '.join(df.columns)}")
-        raise typer.Exit(1)
+    # Resolve column references (names or indices)
+    column_list = resolve_column_references(column_list, df)
 
     # 5. Get unique values
     if len(column_list) == 1:

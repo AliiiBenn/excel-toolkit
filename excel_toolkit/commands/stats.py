@@ -16,6 +16,7 @@ from excel_toolkit.fp import is_ok, is_err, unwrap, unwrap_err
 from excel_toolkit.commands.common import (
     read_data_file,
     display_table,
+    resolve_column_reference,
 )
 
 
@@ -34,12 +35,18 @@ def stats(
     Calculates descriptive statistics including mean, median, standard deviation,
     min, max, quartiles, and more for numeric columns.
 
+    Column reference can be:
+        - Column name: "salary"
+        - Column index (1-based): "3"
+        - Negative index: "-1" (last column)
+
     Examples:
         xl stats data.xlsx --column salary
         xl stats data.csv --all-columns
         xl stats data.xlsx --column age --format json
         xl stats data.csv --all-columns --percentiles 10,25,50,75,90,95,99
         xl stats data.xlsx --all-columns --include categorical
+        xl stats data.xlsx --column "3" --output third-col-stats.xlsx
     """
     # 1. Parse percentiles
     try:
@@ -71,11 +78,9 @@ def stats(
 
     # 5. Determine columns to analyze
     if column:
-        if column not in df.columns:
-            typer.echo(f"Error: Column '{column}' not found", err=True)
-            typer.echo(f"Available columns: {', '.join(df.columns)}")
-            raise typer.Exit(1)
-        columns_to_analyze = [column]
+        # Resolve column reference (supports both name and index)
+        resolved_column = resolve_column_reference(column, df)
+        columns_to_analyze = [resolved_column]
     elif all_columns:
         columns_to_analyze = list(df.columns)
     else:
